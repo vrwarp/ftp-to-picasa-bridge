@@ -2,8 +2,10 @@ import gdata
 import gdata.gauth
 import gdata.photos.service
 import httplib2
+import os.path
 import PIL.Image
 import sys
+import time
 import webbrowser
 
 from oauth2client import client
@@ -30,34 +32,43 @@ def _authorize(self, client):
 
 gdata.gauth.OAuth2Token.authorize = _authorize
 
-def _get_credentials():
+def _get_credentials(http):
     storage = Storage('/home/btsai/.ftp-to-picasaweb-bridge/credentials')
     credentials = storage.get()
-    if credentials == None:
-        flow = client.flow_from_clientsecrets(
-            '/home/btsai/.ftp-to-picasaweb-bridge/client_secrets.json',
-            scope='https://picasaweb.google.com/data/',
-            redirect_uri='urn:ietf:wg:oauth:2.0:oob')
-    
-        auth_uri = flow.step1_get_authorize_url()
-    
-        sys.stdout.write("Opening window for authorization...\n")
-        sys.stdout.flush()
-    
-        webbrowser.open_new(auth_uri)
-    
-        sys.stdout.write("Authorization Code: ")
-        sys.stdout.flush()
-    
-        auth_code = sys.stdin.readline()
-        auth_code = auth_code[:-1]
 
-        credentials = flow.step2_exchange(auth_code)
-        storage.put(credentials)
+    if (credentials is not None and
+        credentials.refresh_token is not None):
+        if credentials.access_token_expired:
+            credentials.refresh(http)
+        return credentials
+
+    flow = client.flow_from_clientsecrets(
+        '/home/btsai/.ftp-to-picasaweb-bridge/client_secrets.json',
+        scope='https://picasaweb.google.com/data/',
+        redirect_uri='urn:ietf:wg:oauth:2.0:oob')
+    
+    auth_uri = flow.step1_get_authorize_url()
+    
+    sys.stdout.write("Opening window for authorization...\n")
+    sys.stdout.flush()
+    
+    # webbrowser.open_new(auth_uri)
+    print auth_uri
+ 
+    sys.stdout.write("Authorization Code: ")
+    sys.stdout.flush()
+
+    auth_code = sys.stdin.readline()
+    auth_code = auth_code[:-1]
+
+    credentials = flow.step2_exchange(auth_code)
+    storage.put(credentials)
+
     return credentials
 
-credentials = _get_credentials()
-http_auth = credentials.authorize(httplib2.Http())
+http = httplib2.Http()
+credentials = _get_credentials(http)
+http_auth = credentials.authorize(http)
 auth2token = gdata.gauth.OAuth2TokenFromCredentials(credentials)
 gd_client = gdata.photos.service.PhotosService(
     email="default",
@@ -80,14 +91,23 @@ def _get_album(client, name, refresh=False):
     else:
         return _get_album(client, name, True)
 
-def _upload_photo(client, filename):
-    image = PIL.Image.open(filename)
+def _upload_photo(client, path):
+    image = PIL.Image.open(path)
     datetime = str(image._getexif()[306]) # 306 is DateTime
     del image
 
     parsed_datetime = time.strptime(datetime, "%Y:%m:%d %H:%M:%S")
 
-    album_name = time.strftime("%m-%Y (by Eye-Fi)", p)
+    album_name = time.strftime("%m-%Y (auto)", parsed_datetime)
 
     album = _get_album(client, album_name)
     
+    album_url = '/data/feed/api/user/default/albumid/%s' % (album.gphoto_id.text)
+    photo = client.InsertPhotoSimple(
+        album_url, os.path.basename(path), None, path, content_type='image/jpeg')
+
+def upload_photo(path):
+    global gd_client
+    _upload_photo(gd_client, path)
+
+# filename = "/shared/iss/photos/2015-04-07/BU2A4400.JPG"
