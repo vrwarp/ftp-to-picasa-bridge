@@ -87,6 +87,7 @@ def _get_album(client, name, refresh=False):
             return album
 
     if refresh:
+        print "Creating album %s" % name
         return client.InsertAlbum(title=name, summary='', access='private')
     else:
         return _get_album(client, name, True)
@@ -107,7 +108,28 @@ def _upload_photo(client, path):
         album_url, os.path.basename(path), None, path, content_type='image/jpeg')
 
 def upload_photo(path):
+    global auth2token
+    global credentials
     global gd_client
-    _upload_photo(gd_client, path)
+    global http
+
+    attempts = 0
+    while True:
+        try:
+            if credentials.access_token_expired:
+                credentials = _get_credentials(http)
+                http_auth = credentials.authorize(http)
+                auth2token = gdata.gauth.OAuth2TokenFromCredentials(credentials)
+                gd_client = gdata.photos.service.PhotosService(
+                    email="default",
+                    additional_headers={'Authorization' : 'Bearer %s' % credentials.access_token}) # For example.
+                gd_client = auth2token.authorize(gd_client)
+
+            _upload_photo(gd_client, path)
+            break
+        except:
+            print "Unexpected error:", sys.exc_info()[0]
+            print "Sleeping for", (attempts * 10)
+            time.sleep(attempts * 10)
 
 # filename = "/shared/iss/photos/2015-04-07/BU2A4400.JPG"

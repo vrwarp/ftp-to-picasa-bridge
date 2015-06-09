@@ -4,6 +4,7 @@ import os
 import pyftpdlib.handlers
 import pyftpdlib.servers
 import picasaweb
+import requests
 import tempfile
 
 class MyHandler(pyftpdlib.handlers.FTPHandler):
@@ -29,6 +30,7 @@ class MyHandler(pyftpdlib.handlers.FTPHandler):
 
     def on_file_received(self, file):
         # do something when a file has been received
+        print "Recieved file: %s" % file
         picasaweb.upload_photo(file)
         os.remove(file)
         pass
@@ -39,6 +41,7 @@ class MyHandler(pyftpdlib.handlers.FTPHandler):
 
     def on_incomplete_file_received(self, file):
         # remove partially uploaded files
+        print "Incomplete file: %s" % file
         os.remove(file)
 
 class DummyHashAuthorizer(pyftpdlib.handlers.DummyAuthorizer):
@@ -56,8 +59,14 @@ authorizer.add_user(
     perm='elradfmw')
 # authorizer.add_anonymous(homedir='.')
 
+import logging
+import pyftpdlib.log
+pyftpdlib.log.LEVEL = logging.DEBUG
+
 handler = MyHandler
 handler.authorizer = authorizer
+handler.passive_ports = list(xrange(2122, 2221))
+handler.masquerade_address = requests.get('https://api.ipify.org').text
 server = pyftpdlib.servers.FTPServer(('', 2121), handler)
 server.serve_forever()
 
