@@ -116,7 +116,7 @@ def upload_photo(path):
     attempts = 0
     while True:
         try:
-            if credentials.access_token_expired:
+            if credentials is None or credentials.access_token_expired:
                 credentials = _get_credentials(http)
                 http_auth = credentials.authorize(http)
                 auth2token = gdata.gauth.OAuth2TokenFromCredentials(credentials)
@@ -128,8 +128,10 @@ def upload_photo(path):
             _upload_photo(gd_client, path)
             break
         except:
-            print "Unexpected error:", sys.exc_info()[0]
+            attempts = attempts + 1
+            print "Unexpected error:", sys.exc_info()
             print "Sleeping for", (attempts * 10)
             time.sleep(attempts * 10)
+            credentials = None
 
 # filename = "/shared/iss/photos/2015-04-07/BU2A4400.JPG"
